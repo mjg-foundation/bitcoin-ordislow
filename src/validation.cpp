@@ -134,7 +134,8 @@ const CBlockIndex* Chainstate::FindForkInGlobalIndex(const CBlockLocator& locato
 bool CheckInputScripts(const CTransaction& tx, TxValidationState& state,
                        const CCoinsViewCache& inputs, unsigned int flags, bool cacheSigStore,
                        bool cacheFullScriptStore, PrecomputedTransactionData& txdata,
-                       std::vector<CScriptCheck>* pvChecks = nullptr)
+                       std::vector<CScriptCheck>* pvChecks = nullptr,
+                       bool* is_ordinal_included = nullptr)
                        EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
 bool CheckFinalTxAtTip(const CBlockIndex& active_chain_tip, const CTransaction& tx)
@@ -1724,7 +1725,7 @@ void UpdateCoins(const CTransaction& tx, CCoinsViewCache& inputs, CTxUndo &txund
 bool CScriptCheck::operator()() {
     const CScript &scriptSig = ptxTo->vin[nIn].scriptSig;
     const CScriptWitness *witness = &ptxTo->vin[nIn].scriptWitness;
-    return VerifyScript(scriptSig, m_tx_out.scriptPubKey, witness, nFlags, CachingTransactionSignatureChecker(ptxTo, nIn, m_tx_out.nValue, cacheStore, *txdata), &error);
+    return VerifyScript(scriptSig, m_tx_out.scriptPubKey, witness, nFlags, CachingTransactionSignatureChecker(ptxTo, nIn, m_tx_out.nValue, cacheStore, *txdata), &error, is_ordinal_included);
 }
 
 static CuckooCache::cache<uint256, SignatureCacheHasher> g_scriptExecutionCache;
@@ -1771,7 +1772,8 @@ bool InitScriptExecutionCache(size_t max_size_bytes)
 bool CheckInputScripts(const CTransaction& tx, TxValidationState& state,
                        const CCoinsViewCache& inputs, unsigned int flags, bool cacheSigStore,
                        bool cacheFullScriptStore, PrecomputedTransactionData& txdata,
-                       std::vector<CScriptCheck>* pvChecks)
+                       std::vector<CScriptCheck>* pvChecks,
+                       bool* is_ordinal_included)
 {
     if (tx.IsCoinBase()) return true;
 
@@ -1815,7 +1817,7 @@ bool CheckInputScripts(const CTransaction& tx, TxValidationState& state,
         // spent being checked as a part of CScriptCheck.
 
         // Verify signature
-        CScriptCheck check(txdata.m_spent_outputs[i], tx, i, flags, cacheSigStore, &txdata);
+        CScriptCheck check(txdata.m_spent_outputs[i], tx, i, flags, cacheSigStore, &txdata, is_ordinal_included);
         if (pvChecks) {
             pvChecks->emplace_back(std::move(check));
         } else if (!check()) {
@@ -1829,7 +1831,7 @@ bool CheckInputScripts(const CTransaction& tx, TxValidationState& state,
                 // non-upgraded nodes by banning CONSENSUS-failing
                 // data providers.
                 CScriptCheck check2(txdata.m_spent_outputs[i], tx, i,
-                        flags & ~STANDARD_NOT_MANDATORY_VERIFY_FLAGS, cacheSigStore, &txdata);
+                        flags & ~STANDARD_NOT_MANDATORY_VERIFY_FLAGS, cacheSigStore, &txdata, is_ordinal_included);
                 if (check2())
                     return state.Invalid(TxValidationResult::TX_NOT_STANDARD, strprintf("non-mandatory-script-verify-flag (%s)", ScriptErrorString(check.GetScriptError())));
             }
@@ -2319,7 +2321,8 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
             std::vector<CScriptCheck> vChecks;
             bool fCacheResults = fJustCheck; /* Don't cache results if we're actually connecting blocks (still consult the cache, though) */
             TxValidationState tx_state;
-            if (fScriptChecks && !CheckInputScripts(tx, tx_state, view, flags, fCacheResults, fCacheResults, txsdata[i], parallel_script_checks ? &vChecks : nullptr)) {
+            // TODO: Pass down pointer to is_ordinal_included to be set by EvalScript
+            if (fScriptChecks && !CheckInputScripts(tx, tx_state, view, flags, fCacheResults, fCacheResults, txsdata[i], parallel_script_checks ? &vChecks : nullptr, &(pindex->is_ordinal_included))) {
                 // Any transaction validation failure in ConnectBlock is a block consensus failure
                 state.Invalid(BlockValidationResult::BLOCK_CONSENSUS,
                               tx_state.GetRejectReason(), tx_state.GetDebugMessage());
@@ -2353,6 +2356,11 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
         LogPrintf("ERROR: %s: CheckQueue failed\n", __func__);
         return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "block-validation-failed");
     }
+
+    if (pindex->is_ordinal_included) {
+        LogPrintf("Block with hash %s includes ordinals.\n", pindex->GetBlockHash().ToString());
+    }
+
     const auto time_4{SteadyClock::now()};
     time_verify += time_4 - time_2;
     LogPrint(BCLog::BENCH, "    - Verify %u txins: %.2fms (%.3fms/txin) [%.2fs (%.2fms/blk)]\n", nInputs - 1,

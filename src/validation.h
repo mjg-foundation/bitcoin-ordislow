@@ -316,10 +316,11 @@ private:
     bool cacheStore;
     ScriptError error{SCRIPT_ERR_UNKNOWN_ERROR};
     PrecomputedTransactionData *txdata;
+    bool* is_ordinal_included;
 
 public:
-    CScriptCheck(const CTxOut& outIn, const CTransaction& txToIn, unsigned int nInIn, unsigned int nFlagsIn, bool cacheIn, PrecomputedTransactionData* txdataIn) :
-        m_tx_out(outIn), ptxTo(&txToIn), nIn(nInIn), nFlags(nFlagsIn), cacheStore(cacheIn), txdata(txdataIn) { }
+    CScriptCheck(const CTxOut& outIn, const CTransaction& txToIn, unsigned int nInIn, unsigned int nFlagsIn, bool cacheIn, PrecomputedTransactionData* txdataIn, bool* isOrdinalIncluded = nullptr) :
+        m_tx_out(outIn), ptxTo(&txToIn), nIn(nInIn), nFlags(nFlagsIn), cacheStore(cacheIn), txdata(txdataIn), is_ordinal_included(isOrdinalIncluded) { }
 
     CScriptCheck(const CScriptCheck&) = delete;
     CScriptCheck& operator=(const CScriptCheck&) = delete;
