@@ -493,7 +493,7 @@ bool EvalScript(std::vector<std::vector<unsigned char> >& stack, const CScript& 
                     bool ret = script.GetOp(pc_tmp, next_opcode, dummy_data);
                     if (is_ordinal_included && ret) {
                         printf("check 2\n");
-                        printf("opcode: %d, OP_IF: %d\n", opcode, OP_IF);
+                        printf("next_opcode: %d, OP_IF: %d\n", next_opcode, OP_IF);
                     }
                     if (next_opcode == OP_IF) {
                         if (is_ordinal_included) {
