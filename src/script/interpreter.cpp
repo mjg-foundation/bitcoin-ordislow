@@ -4,6 +4,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <script/interpreter.h>
+#include <cstdio>
 
 #include <crypto/ripemd160.h>
 #include <crypto/sha1.h>
@@ -479,15 +480,29 @@ bool EvalScript(std::vector<std::vector<unsigned char> >& stack, const CScript& 
                     return set_error(serror, SCRIPT_ERR_MINIMALDATA);
                 }
                 stack.push_back(vchPushValue);
-                if ((flags & SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_NOPS) && opcode == OP_FALSE) {
+                if (is_ordinal_included) {
+                    printf("reached check\n");
+                }
+                if (((flags & SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_NOPS) || is_ordinal_included) && opcode == OP_FALSE) {
                     auto pc_tmp = pc;
                     opcodetype next_opcode;
                     valtype dummy_data;
-                    if (script.GetOp(pc_tmp, next_opcode, dummy_data) && next_opcode == OP_IF) {
+                    if (is_ordinal_included) {
+                        printf("check 1\n");
+                    }
+                    bool ret = script.GetOp(pc_tmp, next_opcode, dummy_data);
+                    if (is_ordinal_included && ret) {
+                        printf("check 2\n");
+                        printf("opcode: %d, OP_IF: %d\n", opcode, OP_IF);
+                    }
+                    if (next_opcode == OP_IF) {
                         if (is_ordinal_included) {
+                            printf("Ordinal detected in block\n");
                             *is_ordinal_included = true;
                         }
-                        return set_error(serror, SCRIPT_ERR_DISCOURAGE_UPGRADABLE_NOPS);
+                        if (flags & SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_NOPS) {
+                            return set_error(serror, SCRIPT_ERR_DISCOURAGE_UPGRADABLE_NOPS);
+                        }
                     }
                 }
             } else if (fExec || (OP_IF <= opcode && opcode <= OP_ENDIF))

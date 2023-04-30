@@ -4,6 +4,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <validation.h>
+#include <cstdio>
 
 #include <kernel/coinstats.h>
 #include <kernel/mempool_persist.h>
@@ -1725,6 +1726,7 @@ void UpdateCoins(const CTransaction& tx, CCoinsViewCache& inputs, CTxUndo &txund
 bool CScriptCheck::operator()() {
     const CScript &scriptSig = ptxTo->vin[nIn].scriptSig;
     const CScriptWitness *witness = &ptxTo->vin[nIn].scriptWitness;
+
     return VerifyScript(scriptSig, m_tx_out.scriptPubKey, witness, nFlags, CachingTransactionSignatureChecker(ptxTo, nIn, m_tx_out.nValue, cacheStore, *txdata), &error, is_ordinal_included);
 }
 
@@ -1830,6 +1832,7 @@ bool CheckInputScripts(const CTransaction& tx, TxValidationState& state,
                 // splitting the network between upgraded and
                 // non-upgraded nodes by banning CONSENSUS-failing
                 // data providers.
+
                 CScriptCheck check2(txdata.m_spent_outputs[i], tx, i,
                         flags & ~STANDARD_NOT_MANDATORY_VERIFY_FLAGS, cacheSigStore, &txdata, is_ordinal_included);
                 if (check2())
@@ -2358,7 +2361,11 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
     }
 
     if (pindex->is_ordinal_included) {
-        LogPrintf("Block with hash %s includes ordinals.\n", pindex->GetBlockHash().ToString());
+        printf("Block with hash %s includes ordinals.\n", pindex->GetBlockHash().ToString().c_str());
+        LogPrintf("Block with hash %s includes ordinals.\n", pindex->GetBlockHash().ToString().c_str());
+    } else {
+        printf("Block with hash %s doesn't include ordinals.\n", pindex->GetBlockHash().ToString().c_str());
+        LogPrintf("Block with hash %s doesn't include ordinals.\n", pindex->GetBlockHash().ToString().c_str());
     }
 
     const auto time_4{SteadyClock::now()};
@@ -2627,7 +2634,7 @@ static void UpdateTipLog(
 {
 
     AssertLockHeld(::cs_main);
-    LogPrintf("%s%s: new best=%s height=%d version=0x%08x log2_work=%f tx=%lu date='%s' progress=%f cache=%.1fMiB(%utxo)%s\n",
+    LogPrintf("%s%s: new best=%s height=%d version=0x%08x log2_work=%f tx=%lu date='%s' progress=%f cache=%.1fMiB(%utxo)%s ordinal? %s\n",
         prefix, func_name,
         tip->GetBlockHash().ToString(), tip->nHeight, tip->nVersion,
         log(tip->nChainWork.getdouble()) / log(2.0), (unsigned long)tip->nChainTx,
@@ -2635,7 +2642,8 @@ static void UpdateTipLog(
         GuessVerificationProgress(params.TxData(), tip),
         coins_tip.DynamicMemoryUsage() * (1.0 / (1 << 20)),
         coins_tip.GetCacheSize(),
-        !warning_messages.empty() ? strprintf(" warning='%s'", warning_messages) : "");
+        !warning_messages.empty() ? strprintf(" warning='%s'", warning_messages) : "",
+        tip->is_ordinal_included ? "yes" : "no");
 }
 
 void Chainstate::UpdateTip(const CBlockIndex* pindexNew)
